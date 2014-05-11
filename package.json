@@ -1,0 +1,25 @@
+{
+  "name": "TripleT Bootstrap",
+  "version": "0.0.0",
+  "description": "Bootstrap for the TripleT Softworks web-site",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tatu Tamminen / TripleT",
+  "license": "ISC",
+  "devDependencies": {
+    "gulp": "~3.6.2",
+    "gulp-rename": "~1.2.0",
+    "gulp-uglify": "~0.3.0",
+    "gulp-concat": "~2.2.0",
+    "gulp-jshint": "~1.5.5",
+    "gulp-sass": "~0.7.1",
+    "gulp-livereload": "~1.5.0",
+    "ecstatic": "~0.5.3",
+    "gulp-util": "~2.2.14",
+    "gulp-htmlmin": "~0.1.2",
+    "gulp-imagemin": "~0.5.0",
+    "imagemin-pngcrush": "~0.1.0"
+  }
+}
