@@ -1,7 +1,5 @@
-// Include gulp
-var gulp = require('gulp'); 
+var gulp = require('gulp');
 
-// Include Our Plugins
 var jshint = require('gulp-jshint');
 var sass = require('gulp-sass');
 var concat = require('gulp-concat');
@@ -9,98 +7,158 @@ var uglify = require('gulp-uglify');
 var rename = require('gulp-rename');
 var livereload = require('gulp-livereload');
 var gutil = require('gulp-util');
+var fileinclude = require('gulp-file-include');
+var prefix = require('gulp-autoprefixer');
 
 // for the release
-var htmlmin = require('gulp-htmlmin'); 
+var htmlmin = require('gulp-htmlmin');
 var imagemin = require('gulp-imagemin');
 var pngcrush = require('imagemin-pngcrush');
+var htmlreplace = require('gulp-html-replace');
+var minifyCSS = require('gulp-minify-css');
+var critical = require('critical');
 
-// Lint Task
-gulp.task('lint', function() {
-    return gulp.src('js/*.js')
-        .pipe(jshint())
-        .pipe(jshint.reporter('default'));
-});
+var del = require('del');
+var vinylPaths = require('vinyl-paths');
 
-// Compile Our Sass
+var onError = function (err) {
+    gutil.beep();
+    console.log(err);
+};
+
 gulp.task('sass', function() {
     return gulp.src('scss/*.scss')
         .pipe(sass())
+        .on('error', function (err) {
+            var displayErr = gutil.colors.red(err);
+            gutil.log(displayErr);
+            gutil.beep();
+            this.emit('end');
+        })
+        .pipe(prefix("last 2 version", "> 1%", "ie 8"))
+        .pipe(gulp.dest('dist/css'))
+        .pipe(livereload());
+});
+
+gulp.task('sassmin', function() {
+    return gulp.src('scss/*.scss')
+        .pipe(sass()).on('error', gutil.log)
+        .pipe(prefix("last 2 version", "> 1%", "ie 8"))
+        .pipe(minifyCSS({keepBreaks:true}))
         .pipe(gulp.dest('dist/css'));
 });
 
-// Concatenate & Minify JS
-gulp.task('scripts', function() {
-    return gulp.src('js/*.js')
-        .pipe(concat('all.js'))
+gulp.task('scripts', function () {
+    return gulp.src('js/**')
+        .pipe(jshint('.jshintrc'))
+        .pipe(jshint.reporter('jshint-stylish'))
         .pipe(gulp.dest('dist/js'))
-        .pipe(rename('all.min.js'))
+        .pipe(livereload());
+});
+
+gulp.task('scriptsmin', function () {
+    return gulp.src(['js/bundled_vendor/*.js', 'js/*.js'])
+        .pipe(jshint('.jshintrc'))
+        .pipe(jshint.reporter('jshint-stylish'))
+        .pipe(concat('all.min.js'))
         .pipe(uglify())
         .pipe(gulp.dest('dist/js'));
 });
 
+gulp.task('vendorscripts', function () {
+    return gulp.src('js/vendor/*.js')
+        .pipe(gulp.dest('dist/js/vendor/'));
+});
+
 gulp.task('html', function () {
     return gulp.src('html/*.html')
+        .pipe(fileinclude({
+            prefix: '@@',
+            basepath: '@file'
+        }))
+        .pipe(gulp.dest('dist'))
+        .pipe(livereload());
+});
+
+gulp.task('htmlmin', ['sassmin'], function () {
+    return gulp.src('html/*.html')
+        .pipe(fileinclude({
+            prefix: '@@',
+            basepath: '@file'
+        }))    
+        .pipe(htmlreplace({
+            'css': 'css/styles.min.css',
+            'js': 'js/all.min.js'
+        }))
+        .pipe(htmlmin({collapseWhitespace: true}))
         .pipe(gulp.dest('dist'));
 });
 
-gulp.task('htmlmin', function () {
-    return gulp.src('html/*.html')
-        .pipe(htmlmin({collapseWhitespace: true}))
-        .pipe(gulp.dest('dist'));
+gulp.task('font', function () {
+    return gulp.src('fonts/**')
+        .pipe(gulp.dest('dist/fonts'));
 });
 
 gulp.task('image', function () {
     return gulp.src('images/**')
         .pipe(imagemin({
             progressive: true,
-            svgoPlugins: [{removeViewBox: false}],
-            use: [pngcrush()]
+            svgoPlugins: [
+            { moveGroupAttrsToElems: false },
+            { convertPathData: false },
+            { removeViewBox: false}
+            ],
+            use: [
+                //pngcrush()
+            ]
         }))
         .pipe(gulp.dest('dist/images'));
 });
 
-// Watch Files For Changes
-gulp.task('watch', function() {
-    gulp.watch('js/*.js', ['lint', 'scripts']);
-    gulp.watch('scss/*.scss', ['sass']);
-    gulp.watch('html/*.html', ['html']);
-    gulp.watch('images/**', ['image']);
+gulp.task('copystyles', function () {
+    return gulp.src(['dist/css/main.css'])
+        .pipe(rename({
+            basename: 'site'
+        }))
+        .pipe(gulp.dest('dist/css'));
+});
 
-    var server = livereload();
-    gulp.watch('dist/**').on('change', function(file) {
-        server.changed(file.path);
-    });
+gulp.task('static', function () {
+    return gulp.src('static/**', { dot: true })
+        .pipe(gulp.dest('dist'));
+});
+
+// Watch Files For Changes
+gulp.task('watch', ['server'], function() {
+    livereload.listen({ basePath: 'dist' });
+    gulp.watch('js/**', ['scripts']);
+    gulp.watch('scss/**/*.scss', ['sass']);
+    gulp.watch('html/**/*.html', ['html', 'sass', 'scripts']);
+    gulp.watch('images/**', ['image']);
 });
 
 gulp.task('server', function (next) {
     var url = require('url'),
-        fileServer = require('ecstatic')({root: './', cache: 'no-cache', showDir: true}),
+        fileServer = require('ecstatic')({
+            root: './dist', 
+            cache: 'no-cache', 
+            showDir: true, 
+            gzip: true, 
+            defaultExt: true }),
         port = 8000;
     require('http').createServer()
         .on('request', function (req, res) {
-            // For non-existent files output the contents of /index.html page in order to make HTML5 routing work
-            var urlPath = url.parse(req.url).pathname;
-            if (urlPath === '/') {
-                req.url = '/dist/index.html';
-            } else if (
-                ['css', 'html', 'ico', 'less', 'js', 'png', 'txt', 'xml'].indexOf(urlPath.split('.').pop()) == -1 &&
-                ['bower_components', 'fonts', 'images', 'src', 'vendor', 'views'].indexOf(urlPath.split('/')[1]) == -1) {
-                req.url = '/dist/index.html';
-            } else if (['src', 'bower_components'].indexOf(urlPath.split('/')[1]) == -1) {
-                req.url = '/dist' + req.url;
-            }
             fileServer(req, res);
-        })
+        })    
         .listen(port, function () {
             gutil.log('Server is listening on ' + gutil.colors.magenta('http://localhost:' + port + '/'));
             next();
         });
 });
 
-gulp.task('base', ['lint', 'sass', 'scripts'])
-
 // Default Task
-gulp.task('default', ['base', 'html', 'watch', 'server' ]);
+gulp.task('default', ['sass', 'image', 'font', 'static', 'scripts', 'html', 'server', 'watch' ]);
 
-gulp.task('build', ['base', 'htmlmin', 'image'])
+gulp.task('build', ['sassmin', 'image', 'font', 'static', 'scriptsmin', 'vendorscripts', 'htmlmin']);
+
+gulp.task('run', ['server']);
